@@ -1,4 +1,5 @@
 """Python script to analyze HCL related telemetry"""
+from __future__ import print_function
 
 from xsautowf.cmd.processsubmission import JIRA, ArgumentParser
 import datetime
@@ -33,18 +34,18 @@ def time_track(inputdate):
                                           week_endday.year,
                                           week_endday.month,
                                           week_endday.day))
-        print "Resolved Tickets between %s to %s = %d" % (week_firstday,
+        print("Resolved Tickets between %s to %s = %d" % (week_firstday,
                                                           week_endday,
-                                                          len(reslvd_tkts))
+                                                          len(reslvd_tkts)))
         crtd_tkts = JIRA.search_issues(query_crtd_tkts % (week_firstday.year,
                                                           week_firstday.month,
                                                           week_firstday.day,
                                                           week_endday.year,
                                                           week_endday.month,
                                                           week_endday.day))
-        print "Created Tickets between %s to %s = %d\n" % (week_firstday,
+        print("Created Tickets between %s to %s = %d\n" % (week_firstday,
                                                            week_endday,
-                                                           len(crtd_tkts))
+                                                           len(crtd_tkts)))
         date = nextweek_firstday
 
 

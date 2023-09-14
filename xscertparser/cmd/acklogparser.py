@@ -1,5 +1,7 @@
 """Entry point script for parsing specified log files"""
+from __future__ import print_function
 
+from builtins import range
 from argparse import ArgumentParser
 from xscertparser.utils import extract_file_from_tar
 from xscertparser import xmltojson
@@ -61,29 +63,29 @@ def result_parser(tarfilename, logsubdir):  # pylint: disable=R0914,R0912
 
     # XS-version
     for version in test_conf.getElementsByTagName("global_config"):
-        if 'xs_version' in version.attributes.keys():
+        if 'xs_version' in version.attributes:
             SERVER_DICT['xs_version'] = version.attributes['xs_version'].value
 
     # CPU info and HBA pci-id info
     hba_bus_id_list = []
     for device in test_conf.getElementsByTagName("device"):
-        if 'family' in device.attributes.keys():
+        if 'family' in device.attributes:
             SERVER_DICT['family'] = device.attributes['family'].value
-        if 'stepping' in device.attributes.keys():
+        if 'stepping' in device.attributes:
             SERVER_DICT['stepping'] = device.attributes['stepping'].value
-        if 'model' in device.attributes.keys():
+        if 'model' in device.attributes:
             SERVER_DICT['model'] = device.attributes['model'].value
-        if 'modelname' in device.attributes.keys():
+        if 'modelname' in device.attributes:
             SERVER_DICT['modelname'] = device.attributes['modelname'].value
-        if 'socket_count' in device.attributes.keys():
+        if 'socket_count' in device.attributes:
             SERVER_DICT['sockets'] = device.attributes['socket_count'].value
-        if 'PCI_description' in device.attributes.keys():
+        if 'PCI_description' in device.attributes:
             if device.attributes['PCI_description'].value \
                     not in SERVER_DICT['nics']:
                 SERVER_DICT['nics'].append(
                     device.attributes['PCI_description'].value
                     )
-        if 'device' in device.attributes.keys():
+        if 'device' in device.attributes:
             hba_bus_id_list.append(device.attributes['id'].value)
 
     # Chassis used info                 i
@@ -161,12 +163,12 @@ def display_results(resdict, keys=None):
         'hbas',
     ]
     if keys is None:
-        keys = resdict.keys()
+        keys = list(resdict.keys())
     for key in keys:
         if type(SERVER_DICT[key]) == 'list':
-            print "%50s :" % key, "%-50s" % pprint.pprint(SERVER_DICT[key])
+            print("%50s :" % key, "%-50s" % pprint.pprint(SERVER_DICT[key]))
         else:
-            print "%50s : %s" % (key, SERVER_DICT[key])
+            print("%50s : %s" % (key, SERVER_DICT[key]))
 
 
 def count_test_failures(tarfilename):
@@ -202,7 +204,7 @@ def do_parse(options):
 
     if options.post:
         json = xmltojson.ack_xml_to_json(test_conf_data)
-        print json
+        print(json)
 
     # fail product lists
     if count > 0:
@@ -217,10 +219,10 @@ def do_parse(options):
             if SERVER_DICT['product'] not in MACHINE_DICT['pass']:
                 if SERVER_DICT['product'] not in MACHINE_DICT['fail']:
                     MACHINE_DICT['fail'].append(SERVER_DICT['product'])
-            print "*******%s tests FAILED for %s *********" % (
+            print("*******%s tests FAILED for %s *********" % (
                 count,
                 xenrtmachine,
-                )
+                ))
         else:
             FAILED_DICT[SERVER_DICT['product']] = exception_list
     else:
@@ -230,21 +232,21 @@ def do_parse(options):
             if SERVER_DICT['product'] not in MACHINE_DICT['pass']:
                 MACHINE_DICT['pass'].append(SERVER_DICT['product'])
     if xenrtmachine:
-        print "#"*30
-        print "NICS LISTING HERE"
+        print("#"*30)
+        print("NICS LISTING HERE")
         display_results(NICS_DICT)
-        print "NICS LISTING OVER"
-        print "#"*30
-        print "HBAs HERE"
+        print("NICS LISTING OVER")
+        print("#"*30)
+        print("HBAs HERE")
         display_results(HBAS_DICT)
-        print "HBAs listing over"
-        print "#"*30
-        print "MY PASSED PRODUCTS"
+        print("HBAs listing over")
+        print("#"*30)
+        print("MY PASSED PRODUCTS")
         pprint.pprint(MACHINE_DICT['pass'])
-        print "#"*30
-        print "MY FAIL PRODUCTS"
+        print("#"*30)
+        print("MY FAIL PRODUCTS")
         pprint.pprint(MACHINE_DICT['fail'])
-        print "#"*30, "FAILED_DICT below"
+        print("#"*30, "FAILED_DICT below")
     display_results(FAILED_DICT)
 
 
@@ -274,30 +276,30 @@ def validate_test_run(json):
 
     for dev in json['devices']:
         driver = ""
-        print ""
+        print("")
         if dev['tag'] == 'NA':
-            print dev['PCI_description']
-            print "Driver: %s %s" % (dev['Driver'], dev['Driver_version'])
-            print "Firmware: %s" % dev['Firmware_version']
+            print(dev['PCI_description'])
+            print("Driver: %s %s" % (dev['Driver'], dev['Driver_version']))
+            print("Firmware: %s" % dev['Firmware_version'])
             driver = dev['Driver']
         if dev['tag'] == 'CPU':
-            print dev['modelname']
+            print(dev['modelname'])
         if dev['tag'] == 'LS':
             if 'product_version' in dev:
-                print dev['PCI_description']
+                print(dev['PCI_description'])
             else:
-                print dev['driver']
+                print(dev['driver'])
                 driver = dev['driver']
         if dev['tag'] == 'OP':
             if 'product_version' in dev:
-                print dev['product_version']
+                print(dev['product_version'])
             else:
-                print dev['version']
+                print(dev['version'])
 
         # CP-30556: Deprecate Marvell (Qlogic) legacy drivers for CH 8.0
         if xs_version >= (8, 0, 0) and driver in DRIVER_BLACK_LIST:
-            print "Error: The driver is already deprecated, " \
-                    "do not list the hardware on HCL!"
+            print("Error: The driver is already deprecated, " \
+                    "do not list the hardware on HCL!")
 
         passed = []
         failed = []
@@ -312,20 +314,20 @@ def validate_test_run(json):
                 ignored.append(test)
 
         if passed:
-            print "Passed:"
+            print("Passed:")
         for t in passed:
-            print t['test_name']
-        print ""
+            print(t['test_name'])
+        print("")
 
         if failed:
-            print "Failed:"
+            print("Failed:")
         for t in failed:
-            print t['test_name']
+            print(t['test_name'])
 
         if ignored:
-            print "Ignored (skipped/other):"
+            print("Ignored (skipped/other):")
         for t in ignored:
-            print t['test_name']
+            print(t['test_name'])
 
 
 def parse_submission(args):
@@ -347,7 +349,7 @@ def parse_submission(args):
     validate_test_run(json)
 
     if args.post:
-        print post_json_to_mongodb(json)
+        print(post_json_to_mongodb(json))
 
 
 def main():

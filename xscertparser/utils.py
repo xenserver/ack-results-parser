@@ -24,5 +24,5 @@ def extract_file_from_tar(tarfilepath, fpath, dest, fullpathknown=True):
 def get_tarpaths_using_regex(tarfilepath, regex):
     """Get filepaths list available in tar archive from the given regex"""
     tarf = tarfile.open(tarfilepath)
-    path = filter(lambda x: re.search(regex, x), tarf.getnames())
+    path = [x for x in tarf.getnames() if re.search(regex, x)]
     return path

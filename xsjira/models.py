@@ -1,5 +1,7 @@
 """Module for Jira bindings onto XS tracker instance"""
+from __future__ import print_function
 
+from builtins import object
 import os
 import tempfile
 from xscertparser.cmd.acklogparser import result_parser
@@ -69,7 +71,7 @@ class JiraTicket(object):
 
     def assign_issue(self, user):
         """Assign the issue to a specified user"""
-        print user
+        print(user)
         return self.jira.assign_issue(self.key, user)
 
     def list_comments(self):
@@ -115,7 +117,7 @@ class HCLSubmission(JiraTicket):
         for afile in self.issue.fields.attachment:
             if 'ack-submission' in afile.filename:
                 return (self.get_attachment_path(afile.id), afile.filename)
-        print "Error: ACK Submission Log is missing in this HCL Submission"
+        print("Error: ACK Submission Log is missing in this HCL Submission")
         return (None, None)
 
     def get_ack_attachment_dict(self, att_path):  # pylint: disable=R0201

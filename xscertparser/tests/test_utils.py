@@ -1,5 +1,7 @@
 """Tests for the utils.py module"""
+from __future__ import print_function
 
+from builtins import str
 import unittest
 import tempfile
 import tarfile
@@ -28,14 +30,14 @@ class TarTestCase(unittest.TestCase):
         os.chdir(tmp_src_dir)
         self.TAR_FILE = "%s/test.tar.gz" % tmp_src_dir
         tar = tarfile.open(str(self.TAR_FILE), 'w:gz')
-        for filename, data in self.TAR_FILES.items():
+        for filename, data in list(self.TAR_FILES.items()):
             tmp_file = "%s/%s" % (self.subdir_n, filename)
             fileh = open(tmp_file, 'w')
             fileh.write(data)
             fileh.close()
             tar.add(tmp_file)
         tar.close()
-        print 'This is the input self.TARFILE %s' % self.TAR_FILE
+        print('This is the input self.TARFILE %s' % self.TAR_FILE)
 
     def _extract_file_from_tar(self, fpath, fullpathknown=True):
         """Test the means of extracting a file"""
@@ -52,7 +54,7 @@ class TarTestCase(unittest.TestCase):
 
     def test_extraction_using_fullpath(self):
         """Test the means of extracting a file"""
-        print 'This is the input self.TARFILE %s' % self.TAR_FILE
+        print('This is the input self.TARFILE %s' % self.TAR_FILE)
         self._extract_file_from_tar('subdir/testfile3')
 
     def test_pextraction_using_regex(self):
@@ -63,8 +65,8 @@ class TarTestCase(unittest.TestCase):
         """Negative Test to test the means of extracting a file"""
         try:
             self._extract_file_from_tar('testfile', False)
-        except Exception, e:
+        except Exception as e:
             if 'None or more than one' not in str(e):
                 raise e
-            print "Returned exception as expected for an entry with \
-                   on-unique regex"
+            print("Returned exception as expected for an entry with \
+                   on-unique regex")
