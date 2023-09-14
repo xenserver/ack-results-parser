@@ -340,7 +340,7 @@ def parse_submission(args):
     tarball_path = "%s/%s" % (tmpdir, bugtool)
     host = inspector.HostFromTarball(tarball_path)
 
-    inspector.print_system_info(host, ['bios', 'cpu', 'nic', 'storage'])
+    print(inspector.system_info(host, ['bios', 'cpu', 'nic', 'storage']))
     shutil.rmtree(tmpdir)
 
     json = get_json_from_test_run(args.filename)
