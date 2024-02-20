@@ -67,7 +67,6 @@ def result_parser(tarfilename, logsubdir):  # pylint: disable=R0914,R0912
             SERVER_DICT['xs_version'] = version.attributes['xs_version'].value
 
     # CPU info and HBA pci-id info
-    hba_bus_id_list = []
     for device in test_conf.getElementsByTagName("device"):
         if 'family' in device.attributes:
             SERVER_DICT['family'] = device.attributes['family'].value
@@ -85,8 +84,6 @@ def result_parser(tarfilename, logsubdir):  # pylint: disable=R0914,R0912
                 SERVER_DICT['nics'].append(
                     device.attributes['PCI_description'].value
                     )
-        if 'device' in device.attributes:
-            hba_bus_id_list.append(device.attributes['id'].value)
 
     # Chassis used info                 i
     lines = open(dmidecode_path).readlines()
