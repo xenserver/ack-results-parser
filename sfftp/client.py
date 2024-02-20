@@ -1,4 +1,6 @@
 """Collection of client related methods for interacting with Sharefile."""
+from __future__ import print_function
+from builtins import object
 import ftplib
 import netrc
 import re
@@ -24,20 +26,20 @@ class SFFTPClient(object):
 
         for directory in upload_path.split('/')[1:-1]:
             if directory not in self.session.nlst():
-                print "Creating new dir %s" % directory
+                print("Creating new dir %s" % directory)
                 self.session.mkd(directory)
             self.session.cwd(directory)
 
-        print 'Uploading file %s' % filename
-        print 'Upload to directory %s' % self.session.pwd()
+        print('Uploading file %s' % filename)
+        print('Upload to directory %s' % self.session.pwd())
         out = self.session.storbinary('STOR %s' % filename,
                                       open(upload_filepath, 'rb'),
                                       blocksize=8192*1024,
                                       )
         if re.search('Transfer Complete', out):
-            print "Transfer Completed."
+            print("Transfer Completed.")
         else:
-            print "Transfer was unsuccessful. Please check file size"
+            print("Transfer was unsuccessful. Please check file size")
         self.session.close()
 
     def download(self, remote_path, download_path):
