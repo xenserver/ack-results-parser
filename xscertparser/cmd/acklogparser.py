@@ -284,7 +284,7 @@ def validate_test_run(json):
         if dev['tag'] == 'LS':
             if 'product_version' in dev:
                 print(dev['PCI_description'])
-            else:
+            elif "driver" in dev:
                 print(dev['driver'])
                 driver = dev['driver']
         if dev['tag'] == 'OP':
