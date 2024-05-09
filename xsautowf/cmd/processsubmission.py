@@ -1,5 +1,7 @@
 """Python script for processing a submission"""
+from __future__ import print_function
 
+from builtins import object
 from jira.client import JIRA
 import re
 from xsjira.models import Task, HCLSubmission, GenericSubmission
@@ -48,8 +50,8 @@ class RemoteCopyToCRD(object):  # pylint: disable=R0903
             "place and attach the link.\nThanks,\nSagnik"
             )
         self.crd_ticket.assign_issue(self.crd_user)
-        print "%s Created" % self.crd_ticket.key
-        print self.crd_ticket.get_summary()
+        print("%s Created" % self.crd_ticket.key)
+        print(self.crd_ticket.get_summary())
         return self.crd_ticket
 
 
@@ -81,12 +83,12 @@ def process_submission(options):
     else:
         ticket = GenericSubmission(JIRA, options.ticket)
 
-    print ticket.get_summary()
+    print(ticket.get_summary())
 
     # If copy flag is set, move a copy to the project CRD
     if options.crddup:
         RemoteCopyToCRD().do_remote_copy(ticket)
-        print "## Remote Copy to CRD Done ##\n"
+        print("## Remote Copy to CRD Done ##\n")
 
     #  For non HCL Submission, we need additional parameters as below
     version = options.version
@@ -98,7 +100,7 @@ def process_submission(options):
     #  To display the ack-submission if there is one:
     if ticket.get_type() == 'HCL Submission' and key in ['server', 'nic']:
         (ack_path, ack_filename) = ticket.get_ack_attachment()
-        print "%s found.\nExtracting Product Info.." % ack_filename
+        print("%s found.\nExtracting Product Info.." % ack_filename)
         adict = ticket.get_ack_attachment_dict(ack_path)
 
         if not version:
@@ -109,7 +111,7 @@ def process_submission(options):
             product_name = "%s %s" % (adict['system-manufacturer'].strip(),
                                       adict['product'].strip())
 
-    print "\nDevice Tested: %s" % product_name
+    print("\nDevice Tested: %s" % product_name)
 
     # derive upload_path for FTP upload
     upload_path = "/XenServer HCL/Hardware Certification Logs"

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from builtins import range
 from pymongo import MongoClient
 import xml.dom.minidom
 import json
@@ -74,7 +75,7 @@ def get_device_test_record(node):
     rec = {}
 
     attrs = get_attributes(node)
-    for k, v in attrs.iteritems():
+    for k, v in attrs.items():
         rec[k] = v
 
     cert_tests = get_child_elems(node)
