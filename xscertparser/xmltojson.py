@@ -1,6 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from builtins import range
 from pymongo import MongoClient
 import xml.dom.minidom
 import json
@@ -35,8 +34,8 @@ def get_text(nodelist):
     rec = []
     for node in nodelist:
         if node.nodeType == node.TEXT_NODE:
-            rc.append(node.data)
-    return ''.join(rc)
+            rec.append(node.data)
+    return ''.join(rec)
 
 
 def get_test_method_record(node):
