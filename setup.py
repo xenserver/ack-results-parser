@@ -4,13 +4,15 @@ setup(
     name="pyxshcl",
     version="0.0dev",
     description="Python libraries/tools for XS HCL work.",
-    author="Sagnik Datta, Rob Dobson",
+    author="Sagnik Datta, Rob Dobson, Catherine Liu",
     author_email=', '.join([
         "sagnik.datta@citrix.com",
         "rob.dobson@citrix.com",
+        "catherine.liu@cloud.com",
     ]),
     url="http://unspeicifed.yet",
     packages=find_packages(),
+    python_requires='>=3.11',
     install_requires=['jira', 'python-hwinfo', 'pymongo'],
     tests_require=[
         "nose",

@@ -1,12 +1,13 @@
-"""Entry point script for parsing specified log files"""
-from __future__ import print_function
+#!/usr/bin/env python3
 
-from builtins import range
+"""Entry point script for parsing specified log files"""
 from argparse import ArgumentParser
 from xscertparser.utils import extract_file_from_tar
 from xscertparser import xmltojson
 import os
 import re
+import subprocess
+import urllib.request
 import xml.dom.minidom
 import pprint
 from hwinfo.tools import inspector
@@ -34,6 +35,247 @@ SERVER_DICT = {
     'hbas': [],
     }
 DRIVER_BLACK_LIST = ["qla4xxx", "qla3xxx", "netxen_nic", "qlge", "qlcnic"]
+IGNORED_RPM_NAMES = {
+    'auto-cert-kit',
+    'control-auto-cert-kit',
+    'update-auto-cert-kit',
+    'gpg-pubkey',
+}
+REPO_CONFIG = {
+    '8.4': [
+        'https://repo.ops.xenserver.com/xs8/base',
+        'https://repo.ops.xenserver.com/xs8/normal',
+        'https://repo.ops.xenserver.com/xs8/earlyaccess'
+    ],
+    '9': [
+        'https://repo.ops.xenserver.com/xs9/base',
+        'https://repo.ops.xenserver.com/xs9/normal',
+        'https://repo.ops.xenserver.com/xs9/earlyaccess'
+    ]
+}
+DEFAULT_ACK_RPMS = {
+   "8.4": {
+    "python3-prettytable": {
+       "rpm": "python3-prettytable-0.7.2-14.xs8.noarch",
+       "version": "0.7.2",
+       "release": "xs8"
+     },
+     "python-hwinfo": {
+       "rpm": "python-hwinfo-0.1.7-3.xs8.x86_64",
+       "version": "0.1.7",
+       "release": "xs8"
+     },
+     "iperf": {
+       "rpm": "iperf-2.0.10-1.el7.x86_64",
+       "version": "2.0.10",
+       "release": "el7"
+     }
+   },
+   "9": {
+     "tcl": {
+       "rpm": "tcl-8.6.12-2.xs9.x86_64",
+       "version": "8.6.12",
+       "release": "xs9"
+     },
+     "expect": {
+       "rpm": "expect-5.45.4-2.xs9.x86_64",
+       "version": "5.45.4",
+       "release": "xs9"
+     },
+     "python3-prettytable": {
+       "rpm": "python3-prettytable-0.7.2-2.xs9.noarch",
+       "version": "0.7.2",
+       "release": "xs9"
+     },
+     "python-hwinfo": {
+       "rpm": "python-hwinfo-0.1.12-1.xs9.noarch",
+       "version": "0.1.12",
+       "release": "xs9"
+     },
+     "iperf": {
+       "rpm": "iperf-2.0.10-1.el7.x86_64",
+       "version": "2.0.10",
+       "release": "el7"
+     }
+   }
+ }
+
+
+def vercmp(a, b) -> int:
+    def _to_int_tuple(v):
+        v = (v or '').strip()
+        if not v:
+            return ()
+        return tuple(int(x or '0') for x in v.split('.'))
+
+    if a==b:
+        return 0
+    ta = _to_int_tuple(a)
+    tb = _to_int_tuple(b)
+    max_len = max(len(ta), len(tb))
+    ta = ta + (0,) * (max_len - len(ta))
+    tb = tb + (0,) * (max_len - len(tb))
+    return (ta > tb) - (ta < tb)
+
+
+def parse_rpm(rpm):
+    rpm_noarch = rpm.rsplit('.', 1)[0]
+    parts = rpm_noarch.rsplit('-', 2)
+    if len(parts) != 3:
+        raise ValueError("Failed to parse RPM filename: %s" % rpm)
+    name, version, release_full = parts[0], parts[1], parts[2]
+    release_tag = release_full.rsplit('.', 1)[-1]
+    return name, version, release_tag
+
+
+def parse_rpm_qa_file(rpm_qa_file):
+    rpms = {}
+    if not os.path.exists(rpm_qa_file):
+        raise FileNotFoundError("Error: file does not exist: %s" % rpm_qa_file)
+    with open(rpm_qa_file) as f:
+        for line in f:
+            rpm = line.strip()
+            if not rpm:
+                continue
+            try:
+                name, version, release = parse_rpm(rpm)
+                if name in IGNORED_RPM_NAMES:
+                    continue
+                rpms[name] = {'rpm': rpm, 'version': version, 'release': release}
+            except Exception:
+                pass
+    return rpms
+
+
+def validate_repo_url(repo_url):
+    try:
+        repomd_url = repo_url.rstrip('/') + '/repodata/repomd.xml'
+        with urllib.request.urlopen(repomd_url, timeout=5):
+            pass
+    except Exception:
+        raise RuntimeError("Error: repo URL is not a valid repo: %s" % repomd_url)
+
+
+def generate_cmd_for_repoquery(repo_urls):
+    if shutil.which("dnf"):
+        cmd = ["dnf"]
+        for i, repo_url in enumerate(repo_urls):
+            validate_repo_url(repo_url)
+            cmd += ["--repofrompath=myrepo%d,%s" % (i, repo_url), "--repo=myrepo%d" % i]
+        cmd += ["repoquery", "--qf", "%{name}-%{version}-%{release}.%{arch}\n", "--latest-limit=1"]
+    else:
+        cmd = ["repoquery", "--disablerepo='*'"]
+        for i, repo_url in enumerate(repo_urls):
+            validate_repo_url(repo_url)
+            cmd += ["--repofrompath=myrepo%d,%s" % (i, repo_url), "--enablerepo=myrepo%d" % i]
+        cmd += ["-a", "--qf", "%{name}-%{version}-%{release}.%{arch}"]
+    return cmd
+
+
+def parse_repo_urls(repo_urls):
+    rpms = {}
+    cmd = generate_cmd_for_repoquery(repo_urls)
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8', check=True, timeout=30) 
+        rpm_lines = result.stdout.strip().splitlines()
+        for line in rpm_lines:
+            rpm = line.strip()
+            if not rpm:
+                continue
+            name, version, release = parse_rpm(rpm)
+            repo_info = {'rpm': rpm, 'version': version, 'release': release}
+            if name not in rpms:
+                rpms[name] = repo_info
+            else:
+                existing = rpms[name]
+                if repo_info['release'] == existing['release']:
+                    cmp_res = vercmp(repo_info['version'], existing['version'])
+                    if cmp_res > 0:
+                        rpms[name] = repo_info
+        return rpms
+    except Exception as e:
+        raise RuntimeError("Failed to query repo. Ensure that YUM/DNF is installed and repo URLs are valid. Details: %s" % e)
+
+
+def compare_rpms(rpm_dict1, rpm_dict2):
+    only_in_file = []
+    higher_in_file = []
+    for name, rpm_info1 in rpm_dict1.items():
+        rpm_full = rpm_info1['rpm']
+        version1 = rpm_info1['version']
+        release1 = rpm_info1['release']
+        if name not in rpm_dict2:
+            only_in_file.append(rpm_full)
+        else:
+            rpm_info2 = rpm_dict2[name]
+            if rpm_full == rpm_info2['rpm']:
+                continue
+            if release1 != rpm_info2['release']:
+                only_in_file.append(rpm_full)
+            else:
+                cmp_res = vercmp(version1, rpm_info2['version'])
+                if cmp_res > 0:
+                    higher_in_file.append(rpm_full)
+    return only_in_file, higher_in_file
+
+
+def parse_xensource_inventory(inventory_path):
+    try:
+        with open(inventory_path, 'r') as f:
+            for line in f:
+                if line.startswith('PRODUCT_VERSION_TEXT='):
+                    return line.split('=', 1)[1].strip().strip("'\"")
+    except Exception:
+        pass
+    return None
+
+
+def extract_rpm_qa_and_inventory_from_submission(tar_gz_file):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with tarfile.open(tar_gz_file, 'r:gz') as tar:
+            found_bz2 = False
+            for member in tar.getmembers():
+                if "bug-report" in member.name and member.name.endswith('.tar.bz2'):
+                    tar.extract(member, tmpdir)
+                    tar_bz2_path = os.path.join(tmpdir, member.name)
+                    found_bz2 = True
+                    break
+            if not found_bz2:
+                raise FileNotFoundError("No tar.bz2 bug-report file found in tar.gz archive")
+
+        rpm_qa_dict = None
+        product_version = None
+        with tarfile.open(tar_bz2_path, 'r:bz2') as tar_bz2:
+            for member in tar_bz2.getmembers():
+                if member.name.endswith('rpm-qa.out'):
+                    tar_bz2.extract(member, tmpdir)
+                    rpm_qa_path = os.path.join(tmpdir, member.name)
+                    rpm_qa_dict = parse_rpm_qa_file(rpm_qa_path)
+                if member.name.endswith('xensource-inventory'):
+                    tar_bz2.extract(member, tmpdir)
+                    inventory_path = os.path.join(tmpdir, member.name)
+                    product_version = parse_xensource_inventory(inventory_path)
+
+        if rpm_qa_dict is None:
+            raise FileNotFoundError("No rpm-qa.out file found in bug-report tar.bz2")
+        return rpm_qa_dict, product_version
+
+
+def compare_submission_rpms_with_repos(tar_gz_file):
+    rpm_dict1, product_version = extract_rpm_qa_and_inventory_from_submission(tar_gz_file)
+    repo_urls = REPO_CONFIG[product_version]
+    rpm_dict2 = parse_repo_urls(repo_urls)
+    rpm_dict2.update(DEFAULT_ACK_RPMS.get(product_version, {}))
+    only_in_file, higher_in_file = compare_rpms(rpm_dict1, rpm_dict2)
+    print("\nFound %d packages not in repos, %d packages with higher versions\n" % (len(only_in_file), len(higher_in_file)))
+    if only_in_file:
+        print("RPMs in rpm-qa.out that do NOT exist in any repo:\n")
+        for rpm in only_in_file:
+            print(rpm)
+    if higher_in_file:
+        print("RPMs in rpm-qa.out with higher version-release than all repos:\n")
+        for rpm in higher_in_file:
+            print(rpm)
 
 
 def result_parser(tarfilename, logsubdir):  # pylint: disable=R0914,R0912
@@ -357,3 +599,4 @@ def main():
     parser.add_argument("-p", "--post", dest="post", action="store_true")
     args = parser.parse_args()
     parse_submission(args)
+    compare_submission_rpms_with_repos(args.filename)
