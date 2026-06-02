@@ -50,10 +50,10 @@ class JiraTicket(object):
     def get_attachment_path(self, aid):
         """Returns attachment file path"""
         att_obj = self.get_attachment_object(aid)
-        url = att_obj.raw['content']
         (fileh, attachment_path) = tempfile.mkstemp()
         os.close(fileh)
-        os.system("curl -n %s -o %s -s" % (url, attachment_path))
+        with open(attachment_path, 'wb') as f:
+            f.write(att_obj.get())
         return attachment_path
 
     def create_issue_link(self, remote_key):
@@ -112,13 +112,56 @@ class HCLSubmission(JiraTicket):
         if self.get_type() != 'HCL Submission':
             raise Exception("Not a HCL Submission! (%s)" % self.get_type())
 
-    def get_ack_attachment(self):
-        """Returns tuple of (ack_path, ack_filename)"""
-        for afile in self.issue.fields.attachment:
-            if 'ack-submission' in afile.filename:
-                return (self.get_attachment_path(afile.id), afile.filename)
-        print("Error: ACK Submission Log is missing in this HCL Submission")
-        return (None, None)
+    def get_ack_attachment(self, attachment_name=None):
+        """Returns list of (ack_path, ack_filename) tuples from a single attachment."""
+        import zipfile
+        import os
+        
+        # Assign ticket to JIRA_USER before downloading attachment
+        jira_user = os.environ.get('JIRA_USER')
+        if jira_user:
+            self.assign_issue(jira_user)
+        
+        # Find target attachment
+        if attachment_name:
+            targets = [f for f in self.issue.fields.attachment if f.filename == attachment_name]
+        else:
+            targets = [f for f in self.issue.fields.attachment 
+                      if 'ack-submission' in f.filename or f.filename.endswith('.zip')]
+            targets.sort(key=lambda f: f.created, reverse=True)
+        
+        if not targets:
+            print("Error: No matching attachment found")
+            return []
+        target = targets[0]
+        
+        # Direct ack-submission file
+        if 'ack-submission' in target.filename:
+            path = self.get_attachment_path(target.id)
+            return [(path, target.filename)]
+        
+        # Zip file - extract all ack-submissions inside
+        if target.filename.endswith('.zip'):
+            zip_path = self.get_attachment_path(target.id)
+            result = []
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as z:
+                    extract_dir = tempfile.mkdtemp()
+                    for name in z.namelist():
+                        if 'ack-submission' in name and '.tar' in name:
+                            z.extract(name, extract_dir)
+                            result.append((os.path.join(extract_dir, name), os.path.basename(name)))
+                            print("Found: %s" % os.path.basename(name))
+            except zipfile.BadZipFile:
+                print("Bad zip file: %s" % target.filename)
+                return []
+            if not result:
+                print("Error: No ack-submission found in %s" % target.filename)
+            result.sort(key=lambda x: x[1], reverse=True)
+            return result
+        
+        print("Error: '%s' is not an ack-submission or zip file" % target.filename)
+        return []
 
     def get_ack_attachment_dict(self, att_path):  # pylint: disable=R0201
         """if type ==Server, Prints dict and returns Dict"""

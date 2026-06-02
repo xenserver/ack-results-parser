@@ -4,17 +4,18 @@
 from argparse import ArgumentParser
 from xscertparser.utils import extract_file_from_tar
 from xscertparser import xmltojson
+from hwinfo.tools import inspector
+from pymongo import MongoClient
 import os
 import re
 import subprocess
+import sys
 import urllib.request
 import xml.dom.minidom
 import pprint
-from hwinfo.tools import inspector
 import tempfile
 import shutil
 import tarfile
-from pymongo import MongoClient
 # import models
 
 NICS_DICT = {}
@@ -263,6 +264,9 @@ def extract_rpm_qa_and_inventory_from_submission(tar_gz_file):
 
 def compare_submission_rpms_with_repos(tar_gz_file):
     rpm_dict1, product_version = extract_rpm_qa_and_inventory_from_submission(tar_gz_file)
+    if product_version not in REPO_CONFIG:
+        print("\nProduct version '%s' not in REPO_CONFIG, skipping repo comparison\n" % product_version)
+        return
     repo_urls = REPO_CONFIG[product_version]
     rpm_dict2 = parse_repo_urls(repo_urls)
     rpm_dict2.update(DEFAULT_ACK_RPMS.get(product_version, {}))
@@ -524,11 +528,13 @@ def validate_test_run(json):
         if dev['tag'] == 'CPU':
             print(dev['modelname'])
         if dev['tag'] == 'LS':
-            if 'product_version' in dev:
+            if 'PCI_description' in dev:
                 print(dev['PCI_description'])
-            elif "driver" in dev:
-                print(dev['driver'])
-                driver = dev['driver']
+            if 'Driver' in dev:
+                print("Driver: %s %s" % (dev['Driver'], dev['Driver_version']))
+                driver = dev['Driver']
+            if 'Firmware_version' in dev:
+                print("Firmware: %s" % dev['Firmware_version'])
         if dev['tag'] == 'OP':
             if 'product_version' in dev:
                 print(dev['product_version'])
@@ -591,12 +597,74 @@ def parse_submission(args):
         print(post_json_to_mongodb(json))
 
 
+TRACKER_URL = 'https://xenserver-tracker.atlassian.net'
+
+
+def get_tracker_ticket(ticket_id):
+    """Get ticket from tracker. Auth via JIRA_USER/JIRA_TOKEN env vars."""
+    from jira.client import JIRA
+    from jira.exceptions import JIRAError
+    from xsjira.models import GenericSubmission
+    user, token = os.environ.get('JIRA_USER'), os.environ.get('JIRA_TOKEN')
+    if not user or not token:
+        print("Error: JIRA_USER and JIRA_TOKEN environment variables are required.")
+        print("Set them with your Atlassian email and API token:")
+        print("  export JIRA_USER='your.email@company.com'")
+        print("  export JIRA_TOKEN='your-api-token'")
+        sys.exit(1)
+    try:
+        jira = JIRA(server=TRACKER_URL, basic_auth=(user, token))
+        return GenericSubmission(jira, ticket_id)
+    except JIRAError as e:
+        if e.status_code == 404:
+            print("Error: Issue '%s' does not exist or you do not have permission to see it." % ticket_id)
+        elif e.status_code == 401:
+            print("Error: Authentication failed. Check your JIRA_USER and JIRA_TOKEN.")
+        else:
+            print("Error: %s" % e.text)
+        sys.exit(1)
+
+
 def main():
     """Entry point"""
     parser = ArgumentParser()
-    parser.add_argument("-f", "--file", dest="filename", required=True,
-                        help="ACK tar file")
+    parser.add_argument("-f", "--file", dest="filename",
+                        help="ACK tar file (local path)")
+    parser.add_argument("-t", "--ticket", dest="ticket",
+                        help="Tracker ticket ID (e.g. HCL-1234 or HCL-1234:filename.zip)")
     parser.add_argument("-p", "--post", dest="post", action="store_true")
     args = parser.parse_args()
-    parse_submission(args)
-    compare_submission_rpms_with_repos(args.filename)
+
+    if args.ticket:
+        # Parse ticket:attachment_name format
+        if ':' in args.ticket:
+            ticket_id, attachment_name = args.ticket.rsplit(':', 1)
+        else:
+            ticket_id, attachment_name = args.ticket, None
+
+        ticket = get_tracker_ticket(ticket_id)
+        attachments = ticket.get_ack_attachment(attachment_name)
+        if not attachments:
+            print("No ack-submission found in %s" % ticket_id)
+            return
+
+        import io, sys
+        for ack_path, ack_name in attachments:
+            print("Processing: %s" % ack_name)
+            args.filename = ack_path
+
+            buf = io.StringIO()
+            sys.stdout = buf
+            parse_submission(args)
+            compare_submission_rpms_with_repos(args.filename)
+            sys.stdout = sys.__stdout__
+
+            output = buf.getvalue()
+            print(output)
+            ticket.add_comment("{code:none}\n%s\n{code}" % output)
+            print("[Comment posted to %s for %s]" % (ticket.key, ack_name))
+    else:
+        if not args.filename:
+            parser.error("Either -f/--file or -t/--ticket is required")
+        parse_submission(args)
+        compare_submission_rpms_with_repos(args.filename)
